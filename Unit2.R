@@ -98,3 +98,83 @@ summary(RunsReg)
 
 RunsReg = lm(RS ~ OBP + SLG, data=moneyball)
 summary(RunsReg)
+
+
+
+###############################################################
+######################## Recitation ###########################
+###############################################################
+# Read in the data
+NBA = read.csv("NBA_train.csv")
+str(NBA)
+
+# How many wins to make the playoffs?
+table(NBA$W, NBA$Playoffs)
+
+# Compute Points Difference
+NBA$PTSdiff = NBA$PTS - NBA$oppPTS
+
+# Check for linear relationship
+plot(NBA$PTSdiff, NBA$W)
+
+# Linear regression model for wins
+WinsReg = lm(W ~ PTSdiff, data=NBA)
+summary(WinsReg)
+
+# Linear regression model for points scored
+PointsReg = lm(PTS ~ X2PA + X3PA + FTA + AST + ORB + DRB + TOV + STL + BLK, data=NBA)
+summary(PointsReg)
+
+# verify how good the model is, using the following
+# Sum of Squared Errors
+PointsReg$residuals
+SSE = sum(PointsReg$residuals^2)
+SSE
+
+# Root mean squared error
+RMSE = sqrt(SSE/nrow(NBA))
+RMSE
+
+# Average number of points in a season
+mean(NBA$PTS) # as you can see the RMSE is 184.40, but the average pts in a season is 8370. So considering that value, the RMSE is not that bad. However, there is still room for improvement.
+
+
+
+# Remove insignifcant variables
+summary(PointsReg)
+
+# remove variable 'TOV' b/c of its pvalue
+PointsReg2 = lm(PTS ~ X2PA + X3PA + FTA + AST + ORB + DRB + STL + BLK, data=NBA)
+summary(PointsReg2)
+
+PointsReg3 = lm(PTS ~ X2PA + X3PA + FTA + AST + ORB + STL + BLK, data=NBA)
+summary(PointsReg3)
+
+PointsReg4 = lm(PTS ~ X2PA + X3PA + FTA + AST + ORB + STL, data=NBA)
+summary(PointsReg4)
+
+# Compute SSE and RMSE for new model
+SSE_4 = sum(PointsReg4$residuals^2)
+RMSE_4 = sqrt(SSE_4/nrow(NBA))
+SSE_4
+RMSE_4   # as you can see the new RMSE is 184.493, which is very close to model PointsReg. However, this model has less amount of variable and is more interpretable.
+
+
+
+# now, let's use the above model 'PointsReg4' to predict
+# Read in test set
+NBA_test = read.csv("NBA_test.csv")
+
+# Make predictions on test set
+PointsPredictions = predict(PointsReg4, newdata=NBA_test)
+
+# well, we have the prediction - PointsPredictions. But how good is it? For that we,
+# Compute out-of-sample R^2
+SSE = sum((PointsPredictions - NBA_test$PTS)^2)
+SST = sum((mean(NBA$PTS) - NBA_test$PTS)^2)
+R2 = 1 - SSE/SST
+R2  # so the R2 is 0.8127142, which not very close to 1, but OK.
+
+# Compute the RMSE
+RMSE = sqrt(SSE/nrow(NBA_test))
+RMSE  #196.3723 is higher than what we got before '184.483'. But it is still not bad.

@@ -1,0 +1,89 @@
+---
+title: "Predicting Loan Payment"
+output: html_document
+---
+In the lending industry, investors provide loans to borrowers in exchange for the promise of repayment with interest. If the borrower repays the loan, then the lender profits from the interest. However, if the borrower is unable to repay the loan, then the lender loses money. Therefore, lenders face the problem of predicting the risk of a borrower being unable to repay a loan.
+
+To address this problem, we will use publicly available data from LendingClub.com, a website that connects borrowers and investors over the Internet. This dataset represents 9,578 3-year loans that were funded through the LendingClub.com platform between May 2007 and February 2010. The binary dependent variable not_fully_paid indicates that the loan was not paid back in full (the borrower either defaulted or the loan was "charged off," meaning the borrower was deemed unlikely to ever pay it back).
+
+To predict this dependent variable, we will use the following independent variables available to the investor when deciding whether to fund a loan:
+
+credit.policy: 1 if the customer meets the credit underwriting criteria of LendingClub.com, and 0 otherwise.
+purpose: The purpose of the loan (takes values "credit_card", "debt_consolidation", "educational", "major_purchase", "small_business", and "all_other").
+int.rate: The interest rate of the loan, as a proportion (a rate of 11% would be stored as 0.11). Borrowers judged by LendingClub.com to be more risky are assigned higher interest rates.
+installment: The monthly installments ($) owed by the borrower if the loan is funded.
+log.annual.inc: The natural log of the self-reported annual income of the borrower.
+dti: The debt-to-income ratio of the borrower (amount of debt divided by annual income).
+fico: The FICO credit score of the borrower.
+days.with.cr.line: The number of days the borrower has had a credit line.
+revol.bal: The borrower's revolving balance (amount unpaid at the end of the credit card billing cycle).
+revol.util: The borrower's revolving line utilization rate (the amount of the credit line used relative to total credit available).
+inq.last.6mths: The borrower's number of inquiries by creditors in the last 6 months.
+delinq.2yrs: The number of times the borrower had been 30+ days past due on a payment in the past 2 years.
+pub.rec: The borrower's number of derogatory public records (bankruptcy filings, tax liens, or judgments).
+
+# Preparing the Dataset
+```{r}
+setwd("c:/Work/Analytics-Edge/Data")
+loans = read.csv("loans.csv")
+str(loans)
+summary(loans)
+
+# Variables with at least one missing observation
+names(which(sapply(loans, function(x)sum(is.na(x))>=1)=="TRUE"))
+# Proportion of not fully paid loans
+as.numeric(table(loans$not.fully.paid)/nrow(loans))[2]
+
+# Data frame with missing observations
+missing = subset(loans, is.na(log.annual.inc) | is.na(days.with.cr.line) | is.na(revol.util) | is.na(inq.last.6mths) | is.na(delinq.2yrs) | is.na(pub.rec))
+nrow(missing)  # removing this small number of observations would not lead to overfitting
+# Proportion of not fully paid in the missing data frame
+as.numeric(table(missing$not.fully.paid)/nrow(missing))[2] # This rate is similar to the 16.01% across all loans, so the form of biasing described is not an issue
+
+# Load VIM library
+library(VIM)
+set.seed(144)
+# Set variables to be imputed. All the predictors
+#vars.for.imputation = setdiff(names(loans), "not.fully.paid")
+#imputed = irmi(loans[vars.for.imputation])
+#loans[vars.for.imputation] = imputed
+#summary(loans)
+# Read imputed data set to compare to the above imputed data
+loans_imputed = read.csv("loans_imputed.csv")  # Use this instead of the one developed using VIM
+summary(loans_imputed)
+```
+
+# Prediction Models
+```{r}
+loans_imputed$purpose = as.factor(loans_imputed$purpose)
+set.seed(144)
+# Load caTools to use sample.split function
+library(caTools)
+split = sample.split(loans_imputed$not.fully.paid, SplitRatio = 0.7)
+train = subset(loans_imputed, split == TRUE)
+test = subset(loans_imputed, split == FALSE)
+
+# Build the model using training set
+mod = glm(not.fully.paid ~ ., data=train, family="binomial")
+# index of Significant predictors
+id = which(summary(mod)$coeff[,4] < 0.05)
+# Significant predictors
+coeff.sig = summary(mod)$coeff[,1][id]
+names(coeff.sig)
+
+# Predict the probability of not fully paid back using the testing set
+predicted.risk <- predict(mod, newdata=test, type="response")
+# Add the predicted.risk variable to the test set
+test$predicted.risk <- predicted.risk
+# Create the confusion matrix of the test set
+Conf <- table(test$not.fully.paid, predicted.risk > 0.5)
+# Accuracy of the logistic regression model
+(Conf[1,1]+Conf[2,2])/sum(Conf)
+# Accuracy of the baseline model
+
+# Load the ROCR to estimate the AUC (Area Under Curve or c statistics)
+library(ROCR)
+ROCRpred <- prediction(predicted.risk, test$not.fully.paid)
+as.numeric(performance(ROCRpred, "auc")@y.values)
+```
+
